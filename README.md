@@ -26,6 +26,7 @@ This will install all requirements except opencv. This you can install by
 ```bash
 sudo apt-get install python-opencv
 ```
+Docker images will be updated soon!
 
 ## Functions of different Programs
 
@@ -56,20 +57,20 @@ After deciding them (or leaving that to defaults) do the following:
 
 2. In case your data isn't split into train and validation sets split them using `train_val_split.py`
 
-```bash
-python train_val_split.py --dataset <dataset_folder> --val_split 0.2
-```
+    ```bash
+    python train_val_split.py --dataset <dataset_folder> --val_split 0.2
+    ```
 
-This code will split the dataset into training set and validation set with ratio $0.8:0.2$.
+    This code will split the dataset into training set and validation set with ratio $0.8:0.2$.
 
-**Please follow the directory structure given in the program**
+    **Please follow the directory structure given in the program**
 
-1. Once train set and validation set is present, `general_model.py` must be executed. This does the bottlenecks creation job and also training job and saves the checkpoint. **This completes your training your classifier !!**
+3. Once train set and validation set is present, `general_model.py` must be executed. This does the bottlenecks creation job and also training job and saves the checkpoint. **This completes your training your classifier !!**
 
-_Sample Execution_
-```bash
-python general_model.py --train train_dir --val val_dir --logs log_resnet --bottleneck_dir bottlenecks  --base_model resnet50 --bottlenecks_batch_size 100 --epochs 1 --bottleneck_tensorname activation_31
-```
+    _Sample Execution_
+    ```bash
+    python general_model.py --train train_dir --val val_dir --logs log_resnet --bottleneck_dir bottlenecks  --base_model resnet50 --bottlenecks_batch_size 100 --epochs 1 --bottleneck_tensorname activation_31
+    ```
 
 This table illustrates different kinds of arguments available in this program
 

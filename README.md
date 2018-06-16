@@ -26,7 +26,19 @@ This will install all requirements except opencv. This you can install by
 ```bash
 sudo apt-get install python-opencv
 ```
-Docker images will be updated soon!
+### Docker image
+
+In case you are looking out for docker images 
+
+```bash
+docker pull tlokeshkumar/img-classifier:v1
+docker run -it tlokeshkumar/img-classifier:v1
+cd ~
+cd Fast-image-classification
+```
+
+Currently this is the CPU version installed. For GPU version for this image use `nvidia-docker`.
+
 
 ## Functions of different Programs
 

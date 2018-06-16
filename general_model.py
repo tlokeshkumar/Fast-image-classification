@@ -1,4 +1,3 @@
-import concurrent.futures
 import keras
 from keras import applications
 from keras.models import Model
@@ -22,14 +21,12 @@ import math
 import pickle
 import json
 import datetime
-import pandas as pd
 import numpy as np
 import cv2
 import os, sys
 from tqdm import tqdm
 from glob import glob
 import shutil
-from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import csv
 import tensorflow as tf

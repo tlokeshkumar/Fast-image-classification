@@ -39,6 +39,17 @@ cd Fast-image-classification
 
 Currently this is the CPU version installed. For GPU version for this image use `nvidia-docker`.
 
+## Quick Start
+
+For a quick start, you can run this script file
+
+```bash
+chmod +x sample_train.sh
+./sample_train.sh
+```
+
+This script file will download the dataset, split it into training and validation datasets, and starts the training and also completes with sample predictions. Feel free to modify this script file to suit your needs!
+
 
 ## Functions of different Programs
 

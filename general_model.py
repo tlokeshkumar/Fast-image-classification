@@ -67,6 +67,7 @@ parser.add_argument("--batch_size_train", default = 128,type = int, help = 'Ente
 parser.add_argument('--epochs', default = 100,type = int, help = 'Enter the number of epochs to train')
 parser.add_argument('--bottlenecks_batch_size', default = 32,type = int, help = 'Enter the batch size to create the bottlenecks. Only relavant if you are creating bottlenecks')
 parser.add_argument('--saving_ckpts', default = 1,type = int, help = 'When do you want to store model during training time? (in number of epochs')
+parser.add_argument('--weight_file', default = 'top.h5', help = 'The name of the weight file what will be stored. (*.h5)')
 args = parser.parse_args()
 
 if args.base_model == 'vgg16':
@@ -316,7 +317,7 @@ def train_with_bottlenecks(args, label_map, trainable_model, non_trainable_model
 			if i%10 == 0:
 				print (str(datetime.datetime.now())+"\tPercent to complete: " + str((iterations_per_epoch_t*EPOCHS - i)*100//(iterations_per_epoch_t*EPOCHS))+"\t\tEpoch: " + str(epoch) + "\tIteration: " + str(i) + '\tLoss: ' + str(loss[0]) + "\tTraining_Accuracy: " + str(loss[1]))
 		if epoch% args.saving_ckpts == 0:
-			trainable_model.save('Resnet50_top.h5')
+			trainable_model.save(args.weight_file)
 		for i in range(iterations_per_epoch_v):
 			X,Y = load_random_cached_bottlenecks(BATCH_SIZE, label_map, validation_addr_label_map, val_npy_dir, 'h5py', h5py_file_val)
 			loss = trainable_model.test_on_batch(X, Y)

@@ -29,13 +29,12 @@ import argparse
 # Note also BOTTLENECK_TENSORNAME must be same in both the cases , training and testing
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--weight_file", help = "Enter the path where the weight file is stored")
+parser.add_argument("--weight_file", default = 'top.h5',help = "Enter the path where the weight file is stored")
 parser.add_argument("--label_file", help = "Enter the path where the label_map is stored")
 parser.add_argument("--img_dir", help = "Enter the path of the dir where images are stored for prediction")
 parser.add_argument("--base_model", choices = ['vgg16', 'vgg19', 'resnet50', 'inceptionv3', 'inception_resnetv2', 'xception', 
 'densenet121', 'densenet169', 'densenet201', 'nasnetmobile', 'nasnetlarge'], default = 'vgg16', help = 'Enter the network you want as your base feature extractor')
 parser.add_argument("--bottleneck_tensorname", help = "Enter the layer of the pre-trained network which you want to make as the bottleneck")
-
 args = parser.parse_args()
 
 if args.base_model == 'vgg16':

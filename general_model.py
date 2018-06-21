@@ -15,8 +15,11 @@ from keras.callbacks import ModelCheckpoint
 from keras.models import load_model
 from keras.regularizers import l1, l2
 import keras.backend as K
+from keras.utils import HDF5Matrix
 from common_network import preprocess_input, transfer_model, create_non_trainable_model
+from keras.utils.io_utils import HDF5Matrix
 import math
+from random import shuffle
 # import libaries
 import pickle
 import json
@@ -33,6 +36,7 @@ import tensorflow as tf
 import argparse
 import random
 import h5py
+import threading
 #######################DOCUMENTATION#####################
 # To change the Bottleneck tensor, change the bottleneck tensorname variable anf if you want, transfer learning model
 # Check for the dimension in load_cached_bottlenecks function and resolve any shape conflicts whatsoever
@@ -63,11 +67,12 @@ parser.add_argument("--load_weights", help = "Enter path where the trained weigh
 parser.add_argument("--bottleneck_tensorname", help = "Enter the layer of the pre-trained network which you want to make as the bottleneck")
 parser.add_argument("--base_model", choices = ['vgg16', 'vgg19', 'resnet50', 'inceptionv3', 'inception_resnetv2', 'xception', 
 'densenet121', 'densenet169', 'densenet201', 'nasnetmobile', 'nasnetlarge'], default = 'vgg16', help = 'Enter the network you want as your base feature extractor')
-parser.add_argument("--batch_size_train", default = 128,type = int, help = 'Enter the batch size that must be used to train')
-parser.add_argument('--epochs', default = 100,type = int, help = 'Enter the number of epochs to train')
+parser.add_argument("--batch_size_train", default = 1,type = int, help = 'Enter the batch size that must be used to train')
+parser.add_argument('--epochs', default = 1,type = int, help = 'Enter the number of epochs to train')
 parser.add_argument('--bottlenecks_batch_size', default = 32,type = int, help = 'Enter the batch size to create the bottlenecks. Only relavant if you are creating bottlenecks')
 parser.add_argument('--saving_ckpts', default = 1,type = int, help = 'When do you want to store model during training time? (in number of epochs')
 parser.add_argument('--weight_file', default = 'top.h5', help = 'The name of the weight file what will be stored. (*.h5)')
+parser.add_argument('--lr', default = 0.01, type = float, help = 'Enter the learning Rate')
 args = parser.parse_args()
 
 if args.base_model == 'vgg16':
@@ -100,7 +105,6 @@ if args.bottleneck_tensorname is  None:
 	BOTTLENECK_TENSOR_NAME = base_model.layers[-1].name
 else:
 	BOTTLENECK_TENSOR_NAME = args.bottleneck_tensorname
-
 ## load data
 
 LABEL_LENGTH = len(glob(args.train + '/*'))
@@ -110,6 +114,28 @@ BOTTLENECKS_BATCHSIZE = args.bottlenecks_batch_size
 EPOCHS = args.epochs
 
 # function to read image
+class Gload_random_cached_bottlenecks:
+	def __init__(self, batch_size, label_map, addr_label_map, dirs, comp_type = 'h5py', hdf5_file = None):
+		self.batch_size = batch_size
+		self.label_map = label_map
+		self.addr_label_map = addr_label_map
+		self.dirs = dirs 
+		self.comp_type = comp_type 
+		self.hdf5_file = hdf5_file
+		self.lock = threading.Lock()
+	def __iter__(self):
+		return self
+	def __next__(self):
+		with self.lock:
+			chosen_h5py = np.random.choice(self.dirs, size = self.batch_size)
+			# chosen_h5py = [dirs[i] for i in batch_index]
+			labels_for_chosen_h5py = [self.label_map[self.addr_label_map[i]] for i in chosen_h5py]
+			h5py_data = np.array([self.hdf5_file[i] for i in chosen_h5py])
+			h5py_onehot = to_categorical(labels_for_chosen_h5py, num_classes = LABEL_LENGTH)
+			# print (h5py_data.shape)
+			return (h5py_data, h5py_onehot)
+			# h5py_data = []
+			# h5py_onehot = []
 def chunks(l, n):
 	c = []
 	for i in range(0, len(l), n):
@@ -170,9 +196,13 @@ def create_bottlenecks_h5py(phase, label_map, dataset, non_trainable_model):
 	print ("[INFO] Creating " + phase + " Bottlenecks")
 	# bottleneck_features_train = non_trainable_model.predict_generator(h1, predict_size_train, verbose = 1)
 	image_addrs = glob(dataset + "/**/*.jpg")
+	shuffle(image_addrs)
 	h5py_dirs = []
 	h5py_labels = []
 	batch_addrs = chunks(image_addrs, BOTTLENECKS_BATCHSIZE)
+	dummy_model = Model(inputs = non_trainable_model.input, outputs = non_trainable_model.output)
+	bottleneck_data = []
+	label_bottleneck = []
 	for chunk in tqdm(batch_addrs):
 		img_batch = []
 		for image_addr in (chunk):
@@ -181,18 +211,26 @@ def create_bottlenecks_h5py(phase, label_map, dataset, non_trainable_model):
 			img_batch.append(img)
 			# img = np.expand_dims(img, axis = 0)
 			# dummy_model = Model(inputs = non_trainable_model.input, outputs = non_trainable_model.get_layer(BOTTLENECK_TENSOR_NAME).output)
-		dummy_model = Model(inputs = non_trainable_model.input, outputs = non_trainable_model.output)
 		# bottleneck_features_train  = non_trainable_model.predict(img)
 		bottleneck_features_train  = dummy_model.predict(np.array(img_batch))
 		# bottleneck_features_train = np.squeeze(bottleneck_features_train)
+		bottleneck_data.extend(bottleneck_features_train)
+		# print (np.array(bottleneck_data).shape)
 		for idx,image_addr in enumerate(chunk):
-			# image_name = os.path.split(image_addr)[1]
+			image_name = os.path.split(image_addr)[1]
 			class_name = os.path.split(os.path.split(image_addr)[0])[1] # Getting the class name of the example
+			label_bottleneck.extend([to_categorical(label_map[class_name], LABEL_LENGTH)])
+			# print (np.array(label_bottleneck).shape)
 			# np.save(bottleneck_train_dir + "/" + class_name + "/" +image_name+".npy", bottleneck_features_train)
-			f.create_dataset(image_addr, data = bottleneck_features_train[idx])
+			# f.create_dataset(image_addr, data = bottleneck_features_train[idx])
 			h5py_dirs.append(image_addr)
 			h5py_labels.append(class_name)
 			addr_label_map = dict(zip(h5py_dirs, h5py_labels))
+	# print (np.array(bottleneck_data).shape)
+	f.create_dataset(phase, data = np.array(bottleneck_data))
+	f.create_dataset(phase+'_labels', data = np.array(label_bottleneck))
+	del bottleneck_data[:]
+	del label_bottleneck[:]
 	return (addr_label_map, h5py_dirs, bottleneck_train_dir+'/'+phase+'.h5')
 def create_bottlenecks(phase, label_map, dataset, non_trainable_model):
 	bottleneck_train_dir = args.bottleneck_dir + "/" +phase
@@ -246,22 +284,28 @@ def load_random_cached_bottlenecks(batch_size, label_map, addr_label_map, dirs, 
 	-------
 	batch: (bottlenecks_train, bottlenecks_labels) a batch of them which is equal to batch_size
 	'''
-	if comp_type == 'npy':
-		length_of_dataset = len(addr_label_map.keys())
-		batch_index = np.random.randint(length_of_dataset, size = batch_size)
-		chosen_npy = [dirs[i] for i in batch_index]
-		labels_for_chosen_npy = [label_map[addr_label_map[i]] for i in chosen_npy]
-		npy_data = np.array([(np.load(i))for i in chosen_npy])
-		npy_onehot = to_categorical(labels_for_chosen_npy, num_classes = LABEL_LENGTH)
-		return ((npy_data, npy_onehot))
-	elif comp_type == 'h5py':
-		length_of_dataset = len(addr_label_map.keys())
-		batch_index = np.random.randint(length_of_dataset, size = batch_size)
-		chosen_h5py = [dirs[i] for i in batch_index]
-		labels_for_chosen_h5py = [label_map[addr_label_map[i]] for i in chosen_h5py]
-		h5py_data = np.array([hdf5_file[i] for i in chosen_h5py])
-		h5py_onehot = to_categorical(labels_for_chosen_h5py, num_classes = LABEL_LENGTH)
-		return ((h5py_data, h5py_onehot))
+	# if comp_type == 'npy':
+	# 	length_of_dataset = len(addr_label_map.keys())
+	# 	batch_index = np.random.randint(length_of_dataset, size = batch_size)
+	# 	chosen_npy = [dirs[i] for i in batch_index]
+	# 	labels_for_chosen_npy = [label_map[addr_label_map[i]] for i in chosen_npy]
+	# 	npy_data = np.array([(np.load(i))for i in chosen_npy])
+	# 	npy_onehot = to_categorical(labels_for_chosen_npy, num_classes = LABEL_LENGTH)
+	# 	return ((npy_data, npy_onehot))
+	# elif comp_type == 'h5py':
+	# length_of_dataset = len(addr_label_map.keys())
+	
+	while True:
+		with threading.Lock():
+			chosen_h5py = np.random.choice(dirs, size = batch_size)
+			# chosen_h5py = [dirs[i] for i in batch_index]
+			labels_for_chosen_h5py = [label_map[addr_label_map[i]] for i in chosen_h5py]
+			h5py_data = np.array([hdf5_file[i] for i in chosen_h5py])
+			h5py_onehot = to_categorical(labels_for_chosen_h5py, num_classes = LABEL_LENGTH)
+			# print (h5py_data.shape)
+			yield (h5py_data, h5py_onehot)
+			# h5py_data = []
+			# h5py_onehot = []
 def train_with_bottlenecks(args, label_map, trainable_model, non_trainable_model, iterations_per_epoch_t, iterations_per_epoch_v):
 	if args.create_bottleneck:
 		training_addr_label_map, train_npy_dir, h5py_file_train = create_bottlenecks_h5py("train", label_map, args.train, non_trainable_model)
@@ -305,24 +349,46 @@ def train_with_bottlenecks(args, label_map, trainable_model, non_trainable_model
 	history_information=[]
 	h5py_file_train =args.bottleneck_dir+'/train/train'+'.h5'
 	h5py_file_val =args.bottleneck_dir+'/val/val'+'.h5'
-	h5py_file_train = h5py.File(h5py_file_train, 'r')
-	h5py_file_val = h5py.File(h5py_file_val, 'r')
+	# h5py_file_train = h5py.File(h5py_file_train, 'r')
+	# h5py_file_val = h5py.File(h5py_file_val, 'r')
+	print("Printing Trainable model summary")
 	print (trainable_model.summary())
-	for epoch in range(EPOCHS):
-		for i in range(iterations_per_epoch_t*EPOCHS):
-			X,Y = load_random_cached_bottlenecks(BATCH_SIZE, label_map, training_addr_label_map, train_npy_dir, 'h5py', h5py_file_train)
-			
-			loss = trainable_model.train_on_batch(X, Y)
-			history_information.append(loss)
-			if i%10 == 0:
-				print (str(datetime.datetime.now())+"\tPercent to complete: " + str((iterations_per_epoch_t*EPOCHS - i)*100//(iterations_per_epoch_t*EPOCHS))+"\t\tEpoch: " + str(epoch) + "\tIteration: " + str(i) + '\tLoss: ' + str(loss[0]) + "\tTraining_Accuracy: " + str(loss[1]))
-		if epoch% args.saving_ckpts == 0:
-			trainable_model.save(args.weight_file)
-		for i in range(iterations_per_epoch_v):
-			X,Y = load_random_cached_bottlenecks(BATCH_SIZE, label_map, validation_addr_label_map, val_npy_dir, 'h5py', h5py_file_val)
-			loss = trainable_model.test_on_batch(X, Y)
-			print ("\tIteration: " + str(i) + '\tLoss: ' + str(loss[0]) + "\tValidation_Accuracy: " + str(loss[1]))
-	np.save("essential_files/history_training.npy", np.array(history_information))
+	checkpoint = ModelCheckpoint(args.weight_file)
+	tb_callback = keras.callbacks.TensorBoard(
+		log_dir=args.logs,
+		histogram_freq=2,
+		write_graph=True
+	)
+	# early_stopping = EarlyStopping(monitor = 'val_loss')
+	callback_list = [checkpoint, tb_callback]#, early_stopping]
+	x_train = HDF5Matrix(h5py_file_train, 'train')
+	y_train = HDF5Matrix(h5py_file_train, 'train_labels')
+	x_val = HDF5Matrix(h5py_file_val, 'val')
+	y_val = HDF5Matrix(h5py_file_val, 'val_labels')
+	print (BATCH_SIZE)
+	trainable_model.fit(x_train, y_train, 
+						batch_size = BATCH_SIZE,
+						epochs = args.epochs,
+						verbose = 1,
+						validation_data = (x_val, y_val),
+						shuffle = 'batch',
+						callbacks = callback_list)
+	'''
+	trainable_model.fit_generator(load_random_cached_bottlenecks(BATCH_SIZE, label_map, training_addr_label_map, train_npy_dir, 'h5py', h5py_file_train),
+	epochs = EPOCHS, steps_per_epoch=iterations_per_epoch_t, validation_data = load_random_cached_bottlenecks(BATCH_SIZE, label_map, validation_addr_label_map, val_npy_dir, 'h5py', h5py_file_val),
+	validation_steps=iterations_per_epoch_v, workers = 1, callbacks = callback_list, use_multiprocessing = True, max_queue_size = 32)
+	'''
+	# loss = trainable_model.train_on_batch(X, Y)
+	# history_information.append(loss)
+	# if i%10 == 0:
+		# print (str(datetime.datetime.now())+"\tPercent to complete: " + str((iterations_per_epoch_t*EPOCHS - i)*100//(iterations_per_epoch_t*EPOCHS))+"\t\tEpoch: " + str(epoch) + "\tIteration: " + str(i) + '\tLoss: ' + str(loss[0]) + "\tTraining_Accuracy: " + str(loss[1]))
+	# if epoch% args.saving_ckpts == 0:
+	# 	trainable_model.save(args.weight_file)
+		# for i in range(iterations_per_epoch_v):
+		# 	X,Y = load_random_cached_bottlenecks(BATCH_SIZE, label_map, validation_addr_label_map, val_npy_dir, 'h5py', h5py_file_val)
+		# 	loss = trainable_model.test_on_batch(X, Y)
+		# 	print ("\tIteration: " + str(i) + '\tLoss: ' + str(loss[0]) + "\tValidation_Accuracy: " + str(loss[1]))
+	# np.save("essential_files/history_training.npy", np.array(history_information))
 	print ("[INFO] Completed Training!")
 def train_without_bottlenecks(train_generator, val_generator, model, train_step_epoch = 2000, val_step_epoch = 500, callback_list = []):
 	'''
@@ -371,17 +437,17 @@ def trainable_model(non_trainable_model):
 # exit(0)
 non_trainable_model = create_non_trainable_model(base_model, BOTTLENECK_TENSOR_NAME)
 trainable_model = trainable_model(non_trainable_model)
-
-
+non_bottleneck_net = Model(inputs = non_trainable_model.input, output = transfer_model(non_trainable_model.output, LABEL_LENGTH, bottleneck_used=False))
+non_bottleneck_net.compile(loss='categorical_crossentropy', optimizer=optimizers.SGD(lr=1e-2, momentum=0.9),
+			metrics=['accuracy'])
 # Train data generator
 train_datagen = ImageDataGenerator(
 		preprocessing_function = preprocess_input)
 
 # Callback list
-checkpoint = ModelCheckpoint('ResNet50-transferlearning.h5')
+checkpoint = ModelCheckpoint(args.weight_file)
 tb_callback = keras.callbacks.TensorBoard(
 	log_dir=args.logs,
-	histogram_freq=2,
 	write_graph=True
 )
 # early_stopping = EarlyStopping(monitor = 'val_loss')
@@ -403,7 +469,7 @@ validation_generator = test_datagen.flow_from_directory(
 nb_validation_samples = len(validation_generator.filenames)  
 predict_size_validation = int(math.ceil(nb_validation_samples / BATCH_SIZE))  
 
-trainable_model.compile(loss='categorical_crossentropy', optimizer=optimizers.SGD(lr=1e-2, momentum=0.9),
+trainable_model.compile(loss='categorical_crossentropy', optimizer=optimizers.Adam(lr=args.lr),
 			metrics=['accuracy'])
 iterations_per_epoch_t = math.ceil((nb_train_samples*1.0/BATCH_SIZE))
 iterations_per_epoch_v = math.ceil((nb_validation_samples*1.0/BATCH_SIZE))
@@ -418,18 +484,18 @@ with open("essential_files/label_map.json", "w") as file:
 
 # saving the bottleneck features for the bottom nontrainable model if not created earlier
 if not args.omit_bottlenecks:
-	non_trainable_model.compile(loss='categorical_crossentropy', optimizer=optimizers.SGD(lr=1e-2, momentum=0.9),metrics=['accuracy'])
-	non_trainable_model.summary()
+	non_trainable_model.compile(loss='categorical_crossentropy', optimizer=optimizers.Adam(lr=1e-3),metrics=['accuracy'])
+	# non_trainable_model.summary()
 	if args.load_weights is not None:
-		non_trainable_model.load_weights(args.load_weights)
+		trainable_model.load_weights(args.load_weights)
 	train_with_bottlenecks(args, label_map, trainable_model, non_trainable_model, iterations_per_epoch_t, iterations_per_epoch_v)
 else:
 	non_trainable_model.compile(loss='categorical_crossentropy', optimizer=optimizers.SGD(lr=1e-2, momentum=0.9),metrics=['accuracy'])
 	if args.load_weights is not None:
 		# non_trainable_model = load_model(args.load_weights)
-		non_trainable_model.load_weights(args.load_weights)
+		trainable_model.load_weights(args.load_weights)
 	# non_trainable_model.summary()
-	train_without_bottlenecks(h1, validation_generator, non_trainable_model, iterations_per_epoch_t, iterations_per_epoch_v, callback_list)
+	train_without_bottlenecks(h1, validation_generator, non_bottleneck_net, iterations_per_epoch_t, iterations_per_epoch_v, callback_list)
 
 # if __name__ == '__main__':
 # 	main(args, base_model)

@@ -7,7 +7,8 @@ python train_val_split.py --dataset flower_photos --val_split 0.2
 echo "Training and Validation Set created"
 
 python general_model.py --train train_dir --val val_dir --logs log_resnet --bottleneck_dir bottlenecks\
-  --base_model resnet50 --bottlenecks_batch_size 100 --epochs 1 --weight_file Resnet50_top.h5 --create_bottleneck
+  --base_model resnet50 --bottlenecks_batch_size 128 --epochs 100 --weight_file inception_top.h5\
+  --batch_size_train 32 --lr 0.001 --bottleneck_tensorname activation_46
 echo "Training Completed, now testing will start. It will just print given image, the class names and confidence."
 
 python general_test.py --weight_file Resnet50_top.h5 --label_file essential_files/label_map.json \

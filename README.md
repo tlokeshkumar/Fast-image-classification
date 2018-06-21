@@ -8,12 +8,15 @@ The common way to approach image classification is **fine tuning** (*Transfer Le
 
 While keeping the base of the network non-trainable means the weight matrices and bias matrices doenst change. In the finetuning procedure we are doing many unnecessary forward passes in the non-trainable part (base layers) which significanlty increases the time taken to finetune. 
 
-So here we do a first forward pass through the non trainable part of the network and store them (Called bottlenecks). Then with the stored file as the dataset we will be training only the trainable part in the fine-tuning process. This considerable speeds up the classification procedure.
+So here we do a first forward pass through the non trainable part of the network and store them (Called bottlenecks). Then with the stored file as the dataset we will be training only the trainable part in the fine-tuning process. This considerable **speeds up** the classification procedure.
 
 This image summarises the entire idea of using bottlenecks in fine-tuning process.
 
 ![image_describing_bottleneck_learning](./images/bottlenecks.png)
 
+## Different Speedups Obtained
+Model | No of Epochs | Time | Accuracy
+ResNet50 | 6 | 206 sec | 89.92%
 ## Installation Instructions
 
 ```bash

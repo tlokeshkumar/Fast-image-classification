@@ -6,7 +6,7 @@ echo "Dataset Downloaded and extracted! Ready for Training!"
 python train_val_split.py --dataset flower_photos --val_split 0.2
 echo "Training and Validation Set created"
 
-python general_model.py --train train_dir --val val_dir --logs log_resnet --bottleneck_dir bottlenecks\
+python general_model.py --train train_dir --val val_dir --logs log_resnet --create_bottleneck --bottleneck_dir bottlenecks\
   --base_model resnet50 --bottlenecks_batch_size 128 --epochs 100 --weight_file inception_top.h5\
   --batch_size_train 32 --lr 0.001 --bottleneck_tensorname activation_46
 echo "Training Completed, now testing will start. It will just print given image, the class names and confidence."
